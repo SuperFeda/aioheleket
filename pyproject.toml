@@ -1,0 +1,22 @@
+[project]
+name = "aioheleket"
+version = "1.0.0"
+description = "Asynchronous Python library for Heleket API"
+readme = "README.md"
+license = "MIT"
+authors = [
+    {name = "SuperFeda"}
+]
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp>=3.12",
+    "pydantic>=2.11",
+    "setuptools>=80.9",
+]
+
+[project.urls]
+homepage = "https://github.com/SuperFeda/aioheleket"
+documentation = "https://github.com/SuperFeda/aioheleket"
+source = "https://github.com/SuperFeda/aioheleket"
+tracker = "https://github.com/SuperFeda/aioheleket/issues"
+
