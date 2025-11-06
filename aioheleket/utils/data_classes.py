@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, Dict
 
 from .enums import (
     Currency,
@@ -12,9 +12,9 @@ from .enums import (
 
 @dataclass
 class Response:
-    json: dict[str, Any]
+    json: Dict[str, Any]
     status: int
-    cookies: dict
+    cookies: Dict
 
 
 @dataclass

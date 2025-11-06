@@ -15,7 +15,7 @@ class HeleketClient:
                  payout_api_key: Union[str, None] = None,
                  ) -> None:
         if not merchant_id:
-            raise ValueError("Merchant id is empty")
+            raise ValueError("Merchant ID is empty")
 
         self.__merchant_id = merchant_id
         self.__payment_api_key = payment_api_key

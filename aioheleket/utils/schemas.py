@@ -1,7 +1,8 @@
 from pydantic import (
     BaseModel,
     ConfigDict,
-    Field, HttpUrl
+    Field,
+    HttpUrl
 )
 from typing import List, Optional, Union
 
@@ -10,15 +11,16 @@ from ..utils.enums import (
     Network,
     CourseSource,
     Priority,
-    Lifetime, PaymentStatus
+    Lifetime,
+    PaymentStatus
 )
 
 
-class OrderIDScheme(BaseModel):
+class ModelWithOrderID(BaseModel):
     order_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
 
 
-class PaymentScheme(OrderIDScheme):
+class PaymentScheme(ModelWithOrderID):
     model_config = ConfigDict(from_attributes=True)
 
     # --- required
@@ -44,7 +46,7 @@ class PaymentScheme(OrderIDScheme):
     is_refresh: bool = False
 
 
-class PaymentTestWebhook(BaseModel):
+class PaymentTestWebhookScheme(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     # --- required
@@ -58,7 +60,7 @@ class PaymentTestWebhook(BaseModel):
     uuid: Optional[str] = None
 
 
-class PayoutScheme(OrderIDScheme):
+class PayoutScheme(ModelWithOrderID):
     model_config = ConfigDict(from_attributes=True)
 
     # --- required
@@ -77,7 +79,7 @@ class PayoutScheme(OrderIDScheme):
     memo: Optional[str] = Field(None, min_length=1, max_length=30)
 
 
-class WalletScheme(OrderIDScheme):
+class WalletScheme(ModelWithOrderID):
     model_config = ConfigDict(from_attributes=True)
 
     # --- required

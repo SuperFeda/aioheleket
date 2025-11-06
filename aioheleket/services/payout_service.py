@@ -14,7 +14,8 @@ from ..utils.data_classes import (
     ServiceLimit,
     Payout,
     Transfer,
-    PayoutConvert, PayoutSum
+    PayoutConvert,
+    PayoutSum
 )
 
 
@@ -24,11 +25,11 @@ class PayoutService:
 
     async def create_invoice(self,
                              amount: str,
-                             currency: Currency,
+                             currency: Union[Currency, str],
                              order_id: str,
                              address: str,
                              is_subtract: bool,
-                             network: Network,
+                             network: Union[Network, str],
                              **kwargs
                              ) -> Payout:
         req_data = {
@@ -57,9 +58,9 @@ class PayoutService:
                    currency: Currency,
                    is_subtract: bool,
                    to_currency: Optional[str],
-                   network: Optional[Network],
-                   course_source: Optional[CourseSource],
-                   priority: Optional[Priority]
+                   network: Optional[Union[Network, str]],
+                   course_source: Optional[Union[CourseSource, str]],
+                   priority: Optional[Union[Priority, str]]
                    ) -> PayoutSum:
         data = (await self.__request_builder.post(
             url="https://api.heleket.com/v1/payout/calc",
@@ -77,18 +78,24 @@ class PayoutService:
 
         return PayoutSum(**data.get("result"))
 
-    async def personal_transfer(self, amount: str, currency: Currency) -> Transfer:
+    async def personal_transfer(self, amount: str, currency: Union[Currency, str]) -> Transfer:
         data = (await self.__request_builder.post(
             url="https://api.heleket.com/v1/transfer/to-personal",
-            data={"amount": amount, "currency": currency}
+            data={
+                "amount": amount,
+                "currency": currency
+            }
         )).json
 
         return Transfer(**data.get("result"))
 
-    async def business_transfer(self, amount: str, currency: Currency) -> Transfer:
+    async def business_transfer(self, amount: str, currency: Union[Currency, str]) -> Transfer:
         data = (await self.__request_builder.post(
             url="https://api.heleket.com/v1/transfer/to-business",
-            data={"amount": amount, "currency": currency}
+            data={
+                "amount": amount,
+                "currency": currency
+            }
         )).json
 
         return Transfer(**data.get("result"))
@@ -101,23 +108,22 @@ class PayoutService:
 
         res = await self.__request_builder.post(
             url="https://api.heleket.com/v1/payout/info",
-            data={"uuid": uuid, "order_id": order_id}
+            data={
+                "uuid": uuid,
+                "order_id": order_id
+            }
         )
-        data = res.json
 
-        return Payout(**data.get("result"))
+        return Payout(**res.json.get("result"))
 
     async def get_services(self) -> List[Service]:
         res = await self.__request_builder.post(url="https://api.heleket.com/v1/payout/services")
 
         serv_list = []
         for srvc in res.json.get("result"):
-            limit = ServiceLimit(**srvc.get("limit"))
-            commission = ServiceCommission(**srvc.get("commission"))
-            srvc.pop("limit")
-            srvc.pop("commission")
+            limit = ServiceLimit(**srvc.pop("limit"))
+            commission = ServiceCommission(**srvc.pop("commission"))
             serv_list.append(Service(**srvc, limit=limit, commission=commission))
 
         return serv_list
-
 

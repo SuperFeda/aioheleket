@@ -1,17 +1,22 @@
 [project]
 name = "aioheleket"
-version = "1.0.0"
+version = "1.1.0"
 description = "Asynchronous Python library for Heleket API"
 readme = "README.md"
 license = "MIT"
 authors = [
-    {name = "SuperFeda"}
+    { name = "SuperFeda" }
 ]
 requires-python = ">=3.10"
 dependencies = [
     "aiohttp>=3.12",
-    "pydantic>=2.11",
+    "pydantic>=2.11"
+]
+
+[project.optional-dependencies]
+dev = [
     "setuptools>=80.9",
+    "twine>=6.2"
 ]
 
 [project.urls]

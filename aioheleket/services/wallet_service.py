@@ -11,8 +11,8 @@ class StaticWalletService:
         self.__request_builder = request_builder
 
     async def create(self,
-                     currency: Currency,
-                     network: Network,
+                     currency: Union[Currency, str],
+                     network: Union[Network, str],
                      order_id: str,
                      url_callback: Optional[str] = None,
                      from_referral_code: Optional[str] = None

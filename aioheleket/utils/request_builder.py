@@ -23,7 +23,7 @@ class RequestBuilder:
         data_to_sign = base64.b64encode(data.encode("utf-8") if data else b"")
         return hashlib.md5(data_to_sign + self.__api_key.encode("utf-8")).hexdigest()
 
-    def __gen_headers(self, data: Optional[Dict[str, Any]] = None) -> dict[str, str]:
+    def __gen_headers(self, data: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         return {
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -36,7 +36,7 @@ class RequestBuilder:
         }
 
     async def post(self, url: str, data: Optional[Dict[str, Any]] = None, **kwargs) -> Response:
-        async with self.__session.post(url=url, data=self.__format_json(data=data), headers=self.__gen_headers(data), **kwargs) as response:
+        async with self.__session.post(url=url, data=self.__format_json(data), headers=self.__gen_headers(data), **kwargs) as response:
 
             res_data = (await response.json())
 
@@ -67,4 +67,4 @@ class RequestBuilder:
             if response.status == 500:
                 raise HeleketServerError(f"{res_data.get('message')}. Error: {res_data.get('error')}")
 
-            return Response(json=(await response.json()), status=response.status, cookies=response.cookies)
+            return Response(json=res_data, status=response.status, cookies=response.cookies)
