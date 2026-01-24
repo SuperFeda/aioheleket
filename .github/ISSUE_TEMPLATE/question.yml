@@ -1,0 +1,14 @@
+name: Question
+title: "[?] "
+description: Create question ticket
+projects: []
+labels:
+  - question
+body:
+  - type: textarea
+    id: textarea-0
+    attributes:
+      label: Question
+      description: Enter your question about aioheleket
+    validations:
+      required: true
