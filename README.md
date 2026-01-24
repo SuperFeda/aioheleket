@@ -4,6 +4,8 @@ An asynchronous Python library for the [Heleket](https://heleket.com) cryptocurr
 
 [See examples](https://github.com/SuperFeda/aioheleket-examples)
 
+- [RU README](https://github.com/SuperFeda/aioheleket/blob/master/readme/ru-readme.md)
+
 ### pip
 ```shell
 pip install aioheleket
