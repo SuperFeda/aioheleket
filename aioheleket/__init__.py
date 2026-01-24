@@ -1,7 +1,7 @@
 from .types.client import HeleketClient
 
-from .utils.enums import *
-from .utils.data_classes import *
+from .enums import *
+from .data_classes import *
 
 __all__ = [
     "HeleketClient",
@@ -13,14 +13,13 @@ __all__ = [
     "PayoutSum",
     "Transfer",
     "Wallet",
-    "ServiceLimit",
-    "ServiceCommission",
     "Service",
     "Discount",
     "Course",
     "Balance",
+    "History",
 
-    "Currency",
+    "CryptoCurrency",
     "FiatCurrency",
     "Network",
     "CourseSource",

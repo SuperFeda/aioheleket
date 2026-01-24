@@ -2,11 +2,17 @@ import hashlib
 import base64
 import json
 
-from typing import Optional, Any, Union, Dict
+from typing import Optional, Any, Literal, Dict
 from aiohttp import ClientSession
 
-from .exceptions import HeleketError, HeleketValidationError, HeleketServerError
-from ..utils.data_classes import Response
+from ..data_classes import Response
+from ..exceptions import (
+    HeleketError,
+    HeleketValidationError,
+    HeleketServerError,
+    InvalidCredentialsError,
+    AioheleketError
+)
 
 
 class RequestBuilder:
@@ -16,55 +22,83 @@ class RequestBuilder:
         self.__api_key = api_key
 
     @staticmethod
-    def __format_json(data: Optional[Dict[str, Any]]) -> Union[None, str]:
-        return json.dumps(data, separators=(",", ":")) if data else None
+    def _format_json(data: Optional[Dict[str, Any]]) -> str:
+        return json.dumps(data, separators=(",", ":"))
 
-    def __gen_sign(self, data: Optional[str] = None) -> str:
-        data_to_sign = base64.b64encode(data.encode("utf-8") if data else b"")
-        return hashlib.md5(data_to_sign + self.__api_key.encode("utf-8")).hexdigest()
+    def _gen_sign(self, data: Optional[str] = None) -> str:
+        encoded_data = base64.b64encode(data.encode("utf-8") if data else b"")
+        encoded_api_key = self.__api_key.encode("utf-8")
+        return hashlib.md5(encoded_data + encoded_api_key).hexdigest()
 
-    def __gen_headers(self, data: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    def _gen_headers(self, data: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         return {
             "Accept": "application/json",
             "Content-Type": "application/json",
             "merchant": self.__merchant_id,
             "sign": (
-                self.__gen_sign(self.__format_json(data))
+                self._gen_sign(self._format_json(data))
                 if data
-                else self.__gen_sign()
+                else self._gen_sign()
             )
         }
 
     async def post(self, url: str, data: Optional[Dict[str, Any]] = None, **kwargs) -> Response:
-        async with self.__session.post(url=url, data=self.__format_json(data), headers=self.__gen_headers(data), **kwargs) as response:
-
-            res_data = (await response.json())
-
-            if res_data.get("state") == 1:
-                if res_data.get("message") is not None:
-                    raise HeleketError(res_data.get("message"))
-                if res_data.get("errors") is not None:
-                    raise HeleketValidationError(f"The parameters were not passed: {res_data.get('errors')}")
-                raise HeleketError("state: 1")
-
-            if response.status == 500:
-                raise HeleketServerError(f"{res_data.get('message')}. Error: {res_data.get('error')}")
-
-            return Response(json=res_data, status=response.status, cookies=response.cookies)
+        return await self._create_request(method="POST", url=url, data=data, **kwargs)
 
     async def get(self, url: str, **kwargs) -> Response:
-        async with self.__session.get(url=url, headers=self.__gen_headers(), **kwargs) as response:
+        return await self._create_request(method="GET", url=url, **kwargs)
 
-            res_data = (await response.json())
+    async def _create_request(self, method: Literal["POST", "GET"], url: str, data: Optional[Dict[str, Any]] = None, **kwargs):
+        async with self.__session.request(
+                method=method,
+                url=url,
+                data=self._format_json(data) if data else None,
+                headers=self._gen_headers(data),
+                **kwargs
+        ) as response:
+            response_data = (await response.json())
+            response_status = response.status
+            if not response_data:
+                await self.__session.close()
+                raise AioheleketError(message="Empty JSON response", method=url, status_code=response_status)
 
-            if res_data.get("state") == 1:
-                if res_data.get("message") is not None:
-                    raise HeleketError(res_data.get("message"))
-                if res_data.get("errors") is not None:
-                    raise HeleketValidationError(f"The parameters were not passed: {res_data.get('errors')}")
-                raise HeleketError("state: 1")
+            state = response_data.get("state")
 
-            if response.status == 500:
-                raise HeleketServerError(f"{res_data.get('message')}. Error: {res_data.get('error')}")
+            if response_status == 401 and response_data.get("message") == "Invalid Sign.":
+                await self.__session.close()
+                raise InvalidCredentialsError(
+                    message="Invalid payment_api_key/payout_api_key or merchant_id in HeleketClient",
+                    status_code=response_status,
+                    method=url,
+                )
 
-            return Response(json=res_data, status=response.status, cookies=response.cookies)
+            if response_status == 500:
+                await self.__session.close()
+                raise HeleketServerError(
+                    message=f"Heleket server error. {response_data.get('message')}. Error: {response_data.get('error')}",
+                    method=url,
+                    status_code=response_status
+                )
+
+            if response_status != 200 or (state is not None and state != 0):
+                await self.__session.close()
+                if "errors" in response_data:
+                    raise HeleketValidationError(
+                        message="Validation error",
+                        status_code=response_status,
+                        method=url,
+                        errors=response_data.get("errors"),
+                    )
+                raise AioheleketError(
+                    message=response_data.get("message", "API error"),
+                    status_code=response_status,
+                    method=url,
+                    json_response=response_data,
+                )
+
+            if response_data.get("result", None) is None:
+                await self.__session.close()
+                raise HeleketError(f"Failed to get result. (Status code: {response_status}; Method: {url}; Response: {response_data})")
+
+            return Response(json=response_data, status=response_status)
+
