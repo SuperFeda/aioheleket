@@ -2,22 +2,22 @@ from typing import Optional, Union, List, Dict
 from datetime import datetime
 
 from .base_service import _BaseService
-from ..utils.request_builder import RequestBuilder
-from ..utils.schemas import PaymentScheme
-from ..enums import (
-    Network,
-    CryptoCurrency,
-    PaymentStatus,
-    CourseSource
-)
-from ..data_classes import (
+from aioheleket.request_builder import RequestBuilder
+from aioheleket.validation.fields import order_id128_adapter
+from aioheleket.validation.schemas import (
+    CreatePayment,
     Payment,
-    Service,
     Discount,
-    PaymentConvert,
-    Pagination,
-    PaymentDataInHistory,
+    Service,
+    CreatePaymentRefund,
     History
+)
+from aioheleket.enums import PaymentStatus, CourseSource
+from aioheleket.types.aliases import (
+    NetworkStr,
+    CryptoCurrencyStr,
+    PaymentStatusStr,
+    CourseSourceStr
 )
 
 
@@ -31,15 +31,17 @@ class PaymentService(_BaseService):
 
     async def test_webhook(self,
                            url_callback: str,
-                           currency: Union[CryptoCurrency, str],
-                           network: Union[Network, str],
-                           status: PaymentStatus = PaymentStatus.PAID,
+                           currency: CryptoCurrencyStr,
+                           network: NetworkStr,
+                           status: PaymentStatusStr = PaymentStatus.PAID,
                            uuid: Optional[str] = None,
                            order_id: Optional[str] = None,
                            ) -> List:
         """
         To ensure that you are correctly receiving webhooks and can validate the signature,
         you should use this method to test webhooks for payment.
+
+        doc https://doc.heleket.com/methods/payments/testing-webhook#testing_payment
 
         :param url_callback: URL to which webhooks with payment status will be sent (*)
         :param currency: Invoice crypro currency code (*)
@@ -60,23 +62,52 @@ class PaymentService(_BaseService):
             order_id=order_id
         )
 
+    async def resend_webhook(self, uuid: Union[str, None] = None, order_id: Union[str, None] = None) -> List:
+        """
+        Resend the webhook by invoice. You can resend the webhook only for finalized invoices,
+        that is, invoices in statuses: ``wrong_amount``, ``paid``, ``paid_over``.
+
+        To resend the webhook on the invoice, the url_callback must be specified at the time of invoice creation.
+
+        (You need to pass one of the required parameters, if you pass both, the account will be identified by ``order_id``)
+
+        doc https://doc.heleket.com/ru/methods/payments/resend-webhook
+
+        :param uuid: Invoice uuid
+        :param order_id: Invoice order ID
+
+        :return: Empty list on successful processing
+        """
+        if uuid is None and order_id is None:
+            raise ValueError("Required parameter not passed: uuid or order_id")
+
+        if order_id:
+            order_id128_adapter.validate_python(order_id)
+
+        request_data = {
+            "uuid": uuid,
+            "order_id": order_id
+        }
+        result = await self._get_result_data("POST", "/payment/resend", request_data)
+        return result
+
     async def create_invoice(self,
                              amount: str,
-                             currency: CryptoCurrency,
+                             currency: CryptoCurrencyStr,
                              order_id: str,
                              lifetime: Optional[int] = 3600,
-                             network: Optional[Union[Network, str]] = None,
+                             network: Optional[NetworkStr] = None,
                              url_callback: Optional[str] = None,
                              url_return: Optional[str] = None,
                              url_success: Optional[str] = None,
                              is_payment_multiple: bool = True,
-                             to_currency: Optional[Union[CryptoCurrency, str]] = None,
+                             to_currency: Optional[CryptoCurrencyStr] = None,
                              subtract: int = 0,
                              accuracy_payment_percent: int = 0,
                              additional_data: Optional[str] = None,
                              currencies: Optional[List[Dict[str, str]]] = None,
                              except_currencies: Optional[List[Dict[str, str]]] = None,
-                             course_source: Optional[CourseSource] = None,
+                             course_source: Optional[CourseSourceStr] = None,
                              from_referral_code: Optional[str] = None,
                              discount_percent: Optional[int] = None,
                              is_refresh: bool = False,
@@ -84,6 +115,8 @@ class PaymentService(_BaseService):
                              ) -> Payment:
         """
         Create new payment.
+
+        doc https://doc.heleket.com/methods/payments/creating-invoice
 
         Args:
             amount (str): Amount to be paid. If there are pennies in the amount, then send
@@ -137,54 +170,40 @@ class PaymentService(_BaseService):
         Returns:
             Payment object.
         """
-        request_data = {
-            "amount": amount,
-            "currency": currency,
-            "order_id": order_id,
-            "lifetime": lifetime,
-            "network": network,
-            "url_callback": url_callback,
-            "url_return": url_return,
-            "url_success": url_success,
-            "is_payment_multiple": is_payment_multiple,
-            "to_currency": to_currency,
-            "subtract": subtract,
-            "accuracy_payment_percent": accuracy_payment_percent,
-            "additional_data": additional_data,
-            "currencies": currencies,
-            "except_currencies": except_currencies,
-            "course_source": course_source,
-            "from_referral_code": from_referral_code,
-            "discount_percent": discount_percent,
-            "is_refresh": is_refresh,
-            "payer_email": payer_email
-        }
-        PaymentScheme.model_validate(request_data)
-        result = await self._get_result_data("POST", "/payment", request_data)
-
-        convert_data = result.get("convert")
-        if convert_data is not None:
-            convert_data = PaymentConvert(**convert_data)
-            result.pop("convert")
-
-        from_data = result.pop("from")
-        created_at_data = result.pop("created_at")
-        updated_at_data = result.pop("updated_at")
-
-        return Payment(
-            from_=from_data,
-            convert=convert_data,
-            updated_at=datetime.fromisoformat(updated_at_data),
-            created_at=datetime.fromisoformat(created_at_data),
-            **result
+        payment_data = CreatePayment(
+            amount=amount,
+            currency=currency,
+            order_id=order_id,
+            lifetime=lifetime,
+            network=network,
+            url_callback=url_callback,
+            url_return=url_return,
+            url_success=url_success,
+            is_payment_multiple=is_payment_multiple,
+            to_currency=to_currency,
+            subtract=subtract,
+            accuracy_payment_percent=accuracy_payment_percent,
+            additional_data=additional_data,
+            currencies=currencies,
+            except_currencies=except_currencies,
+            course_source=course_source,
+            from_referral_code=from_referral_code,
+            discount_percent=discount_percent,
+            is_refresh=is_refresh,
+            payer_email=payer_email
         )
+        request_data = payment_data.model_dump(exclude_none=False)
+        result = await self._get_result_data("POST", "/payment", request_data)
+        return Payment.model_validate(result)
 
     async def payment_info(self, *, uuid: Union[str, None] = None, order_id: Union[str, None] = None) -> Payment:
         """
         Get a payment info.
 
         To get the invoice status you need to pass one of the required parameters, if you pass both,
-        the account will be identified by order_id.
+        the account will be identified by ``order_id``.
+
+        doc https://doc.heleket.com/methods/payments/payment-information
 
         :param uuid: Invoice uuid
         :param order_id: Invoice order ID
@@ -193,35 +212,22 @@ class PaymentService(_BaseService):
         """
         if uuid is None and order_id is None:
             raise ValueError("Required parameter not passed: uuid or order_id")
-        if uuid is not None and order_id is not None:
-            raise ValueError("One of the parameters must be passed: uuid or order_id")
+
+        if order_id:
+            order_id128_adapter.validate_python(order_id)
 
         request_data = {
             "uuid": uuid,
             "order_id": order_id
         }
         result = await self._get_result_data("POST", "/payment/info", request_data)
-
-        convert_data = result.get("convert", None)
-        if convert_data is not None:
-            convert_data = PaymentConvert(**convert_data)
-            result.pop("convert")
-
-        from_data = result.pop("from")
-        created_at_data = result.pop("created_at")
-        updated_at_data = result.pop("updated_at")
-
-        return Payment(
-            from_=from_data,
-            convert=convert_data,
-            updated_at=datetime.fromisoformat(updated_at_data),
-            created_at=datetime.fromisoformat(created_at_data),
-            **result
-        )
+        return Payment.model_validate(result)
 
     async def generate_qr_code(self, payment_uuid: str) -> str:
         """
         Generate a QR-code for the invoice address
+
+        doc https://doc.heleket.com/methods/payments/qr-code-pay-form
 
         :param payment_uuid: Invoice uuid
 
@@ -242,7 +248,9 @@ class PaymentService(_BaseService):
         """
         Refund a payment
 
-        (! Invoice is identified by ``order_id`` or ``uuid``, if you pass both, the account will be identified by ``uuid``)
+        (Invoice is identified by ``order_id`` or ``uuid``, if you pass both, the account will be identified by ``uuid``)
+
+        doc https://doc.heleket.com/methods/payments/refund
 
         :param refund_address: The address to which the refund should be made (*)
         :param is_subtract: (*)
@@ -254,8 +262,9 @@ class PaymentService(_BaseService):
         """
         if uuid is None and order_id is None:
             raise ValueError("Required parameter not passed: uuid or order_id")
-        if uuid is not None and order_id is not None:
-            raise ValueError("one of the parameters must be passed: uuid or order_id")
+
+        if order_id:
+            order_id128_adapter.validate_python(order_id)
 
         request_data = {
             "address": refund_address,
@@ -264,59 +273,49 @@ class PaymentService(_BaseService):
             "order_id": order_id,
             "amount": amount
         }
+        CreatePaymentRefund.model_validate(request_data)
         result = await self._get_result_data("POST", "/payment/refund", request_data)
-
         return result
 
     async def payment_history(self,
-                              date_from: Optional[Union[str, datetime]] = None,
-                              date_to: Optional[Union[str, datetime]] = None
+                              date_from: Optional[datetime] = None,
+                              date_to: Optional[datetime] = None
                               ) -> History:
         """
         Getting a payment history.
 
+        doc https://doc.heleket.com/methods/payments/payment-history
+
         :param date_from: Filtering by creation date, from.
         :param date_to: Filtering by creation date, to.
-
-        Date format: YYYY-MM-DD H:mm:ss
 
         :return: History object
         """
         result = await self._get_history_data("/payment/list", date_from=date_from, date_to=date_to)
-        paginate = Pagination(**result.pop("paginate"))
-
-        payments = []
-        for payment_data in result.get("items"):
-            created_at_data = payment_data.pop("created_at")
-            updated_at_data = payment_data.pop("updated_at")
-            from_data = payment_data.pop("from")
-            payments.append(PaymentDataInHistory(
-                from_=from_data,
-                created_at=datetime.fromisoformat(created_at_data),
-                updated_at=datetime.fromisoformat(updated_at_data),
-                **payment_data
-            ))
-
-        return History(paginate=paginate, items=payments)
+        return History.model_validate(result)
 
     async def services_info(self) -> List[Service]:
         """
         Returns a list of available payment services.
         Payment services store settings that are taken into account when creating an invoice.
         For example. currencies, networks, minimum and maximum limits, commissions.
+
+        doc https://doc.heleket.com/methods/payments/list-of-services
         """
         return await self._get_services_info("/payment/services")
 
     async def discount_list(self) -> List[Discount]:
         """
         Getting discount data as a list
+
+        doc https://doc.heleket.com/other/discount-payment/list-of-discounts
         """
         discount_data = await self._get_result_data("POST", "/payment/discount/list")
-        return [Discount(**disc) for disc in discount_data]
+        return [Discount.model_validate(disc) for disc in discount_data]
 
     async def set_discount(self,
-                           currency: Union[CryptoCurrency, str],
-                           network: Union[Network, str],
+                           currency: CryptoCurrencyStr,
+                           network: NetworkStr,
                            discount_percent: int
                            ) -> Discount:
         """
@@ -327,6 +326,8 @@ class PaymentService(_BaseService):
 
         Negative Numbers (<0). Adds a certain percentage (padding) for paying with a coin. This could be used to
         cover your crypto/fiat conversion costs, make adjustments to match your local exchange, etc.
+
+        doc https://doc.heleket.com/other/discount-payment/set-discount-to-payment-method
 
         :param currency: Currency code (*)
         :param network: Blockchain network code (*)
@@ -339,6 +340,7 @@ class PaymentService(_BaseService):
             "currency": currency,
             "discount_percent": discount_percent
         }
+        Discount.model_validate(request_data)
         result = await self._get_result_data("POST", "/payment/discount/set", request_data)
-        return Discount(**result)
+        return Discount.model_validate(result)
 

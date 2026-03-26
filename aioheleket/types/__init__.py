@@ -3,5 +3,5 @@ from .aliases import *
 
 __all__ = [
     "HeleketClient",
-    "Currency"
+    "Currency",
 ]

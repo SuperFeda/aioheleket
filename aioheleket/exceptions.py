@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 class HeleketError(Exception):
@@ -27,4 +27,9 @@ class HeleketServerError(HeleketError):
 class HeleketValidationError(HeleketError):
     def __init__(self, message: str, method: str, status_code: int, errors):
         super().__init__(f"{message} (Status code: {status_code}; Method: {method}; Errors: {errors})")
+
+
+class NetworkError(HeleketError):
+    def __init__(self, message: str, exc: Optional[Exception] = None):
+        super().__init__(message if exc is None else f"{message}: {exc!r}")
 

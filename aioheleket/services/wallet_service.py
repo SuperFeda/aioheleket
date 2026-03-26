@@ -1,10 +1,11 @@
 from typing import Optional, Union, Tuple, List
 
 from .base_service import _BaseService
-from ..utils.request_builder import RequestBuilder
-from ..enums import Network, CryptoCurrency, StaticWalletStatus
-from ..utils.schemas import WalletScheme
-from ..data_classes import Wallet
+from aioheleket.request_builder import RequestBuilder
+from aioheleket.types.aliases import NetworkStr, CryptoCurrencyStr, StaticWalletStatusStr
+from aioheleket.enums import StaticWalletStatus
+from aioheleket.validation.schemas import CreateWallet, StaticWallet
+from aioheleket.validation.fields import order_id100_adapter
 
 
 class StaticWalletService(_BaseService):
@@ -17,15 +18,17 @@ class StaticWalletService(_BaseService):
 
     async def test_webhook(self,
                            url_callback: str,
-                           currency: Union[CryptoCurrency, str],
-                           network: Union[Network, str],
-                           status: StaticWalletStatus = StaticWalletStatus.PAID,
+                           currency: CryptoCurrencyStr,
+                           network: NetworkStr,
+                           status: StaticWalletStatusStr = StaticWalletStatus.PAID,
                            uuid: Optional[str] = None,
                            order_id: Optional[str] = None,
                            ) -> List:
         """
         To ensure that you are correctly receiving webhooks and can validate the signature,
         you should use this method to test webhooks for payment.
+
+        doc https://doc.heleket.com/methods/payments/testing-webhook#testing_wallet
 
         :param url_callback: URL to which webhooks with payment status will be sent (*)
         :param currency: Invoice crypro currency code (*)
@@ -47,14 +50,19 @@ class StaticWalletService(_BaseService):
         )
 
     async def create_wallet(self,
-                            currency: Union[CryptoCurrency, str],
-                            network: Union[Network, str],
+                            currency: CryptoCurrencyStr,
+                            network: NetworkStr,
                             order_id: str,
                             url_callback: Optional[str] = None,
                             from_referral_code: Optional[str] = None
-                            ) -> Wallet:
+                            ) -> StaticWallet:
         """
         Creating a Static wallet
+
+        (! A commission of 2 TRX is charged when creating a static wallet. This fee covers the cost of wallet
+        creation and is applied only once, during the first transaction.)
+
+        doc https://doc.heleket.com/methods/payments/creating-static
 
         Args:
             currency (Union[CryptoCurrency, str]): Currency code (*)
@@ -71,22 +79,22 @@ class StaticWalletService(_BaseService):
         Returns:
             Wallet object
         """
-        request_data = {
-            "currency": currency,
-            "order_id": order_id,
-            "network": network,
-            "url_callback": url_callback,
-            "from_referral_code": from_referral_code
-        }
-        WalletScheme.model_validate(request_data)
+        wallet_data = CreateWallet(
+            currency=currency,
+            order_id=order_id,
+            network=network,
+            url_callback=url_callback,
+            from_referral_code=from_referral_code
+        )
+        request_data = wallet_data.model_dump(exclude_none=False)
         result = await self._get_result_data("POST", "/wallet", request_data)
-        return Wallet(**result)
+        return StaticWallet.model_validate(result)
 
     async def block_wallet(self,
                            uuid: Union[str, None] = None,
                            order_id: Union[str, None] = None,
                            is_force_refund: bool = False
-                           ) -> Tuple[str, StaticWalletStatus]:
+                           ) -> Tuple[str, str]:
         """
         Block static wallet.
 
@@ -94,7 +102,9 @@ class StaticWalletService(_BaseService):
         his balance. You can make a refund of this funds only once. The funds will be returned to
         the addresses from which they came.
 
-        (! You need to pass one of the required parameters, if you pass both, the account will be identified by order_id)
+        (You need to pass one of the required parameters, if you pass both, the account will be identified by ``order_id``)
+
+        doc https://doc.heleket.com/methods/payments/block-wallet
 
         :param uuid: uuid of a static wallet
         :param order_id: Order ID of a static wallet
@@ -104,8 +114,9 @@ class StaticWalletService(_BaseService):
         """
         if uuid is None and order_id is None:
             raise ValueError("Required parameter not passed: uuid or order_id")
-        if uuid is not None and order_id is not None:
-            raise ValueError("one of the parameters must be passed: uuid or order_id")
+
+        if order_id:
+            order_id100_adapter.validate_python(order_id)
 
         request_data = {
             "uuid": uuid,
@@ -121,6 +132,8 @@ class StaticWalletService(_BaseService):
     async def generate_qr_code(self, wallet_uuid: str) -> str:
         """
         Generate a QR-code for the static wallet address
+
+        doc https://doc.heleket.com/methods/payments/qr-code-pay-form
 
         :param wallet_uuid: uuid of a static wallet
 
@@ -141,7 +154,9 @@ class StaticWalletService(_BaseService):
 
         You can make a refund only once.
 
-        (! To refund payments you need to pass either uuid or ``order_id``, if you pass both, the static wallet will be identified by ``uuid``)
+        (To refund payments you need to pass either ``uuid`` or ``order_id``, if you pass both, the static wallet will be identified by ``uuid``)
+
+        doc https://doc.heleket.com/methods/payments/refundblocked
 
         :param refund_address: Refund all blocked funds to this address (*)
         :param uuid: uuid of a static wallet (*)
@@ -151,8 +166,9 @@ class StaticWalletService(_BaseService):
         """
         if uuid is None and order_id is None:
             raise ValueError("Required parameter not passed: uuid or order_id")
-        if uuid is not None and order_id is not None:
-            raise ValueError("one of the parameters must be passed: uuid or order_id")
+
+        if order_id:
+            order_id100_adapter.validate_python(order_id)
 
         request_data = {
             "uuid": uuid,

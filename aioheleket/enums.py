@@ -1,9 +1,7 @@
-from enum import IntEnum
-
-from .utils.enum_types import StrEnum
+from enum import IntEnum, Enum
 
 
-class CryptoCurrency(StrEnum):
+class CryptoCurrency(Enum):
     """
     Cryptocurrency codes supported by Heleket
 
@@ -31,7 +29,7 @@ class CryptoCurrency(StrEnum):
     XMR = "XMR"
 
 
-class FiatCurrency(StrEnum):
+class FiatCurrency(Enum):
     """
     Codes of some fiat currencies supported by Heleket
     """
@@ -70,7 +68,7 @@ class FiatCurrency(StrEnum):
     VND = "VND"
 
 
-class Network(StrEnum):
+class Network(Enum):
     """
     Blockchain network codes
 
@@ -92,7 +90,7 @@ class Network(StrEnum):
     XMR = "XMR"
 
 
-class CourseSource(StrEnum):
+class CourseSource(Enum):
     """
     Enum of services from which the exchange rates for invoice recalculation are taken
     """
@@ -103,7 +101,7 @@ class CourseSource(StrEnum):
     GARANTEXIO = "Garantexio"
 
 
-class PaymentStatus(StrEnum):
+class PaymentStatus(Enum):
     """
     Payment statuses
 
@@ -123,7 +121,7 @@ class PaymentStatus(StrEnum):
     LOCKED = "locked"
 
 
-class PayoutStatus(StrEnum):
+class PayoutStatus(Enum):
     """
     Payout statuses
 
@@ -137,7 +135,7 @@ class PayoutStatus(StrEnum):
     FAIL = "fail"
 
 
-class StaticWalletStatus(StrEnum):
+class StaticWalletStatus(Enum):
     """
     Static wallet statuses
 
@@ -160,7 +158,7 @@ class StaticWalletStatus(StrEnum):
     LOCKED = "locked"
 
 
-class Priority(StrEnum):
+class Priority(Enum):
     RECOMMENDED = "recommended"
     ECONOMY = "economy"
     HIGH = "high"

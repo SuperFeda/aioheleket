@@ -2,25 +2,25 @@ from datetime import datetime
 from typing import Optional, Union, List
 
 from .base_service import _BaseService
-from ..types.aliases import Currency
-from ..utils.request_builder import RequestBuilder
-from ..enums import (
-    Network,
-    CryptoCurrency,
-    CourseSource,
-    Priority,
-    PayoutStatus
+from aioheleket.request_builder import RequestBuilder
+from aioheleket.types.aliases import (
+    Currency,
+    CryptoCurrencyStr,
+    NetworkStr,
+    PayoutStatusStr,
+    PriorityStr,
+    CourseSourceStr
 )
-from ..utils.schemas import PayoutScheme
-from ..data_classes import (
+from aioheleket.enums import Priority, PayoutStatus
+from aioheleket.validation.fields import order_id100_adapter
+from aioheleket.validation.schemas import (
+    CreatePayout,
     Service,
     Payout,
+    CreatePayoutWithdrawalAmount,
+    PayoutWithdrawalAmount,
     Transfer,
-    PayoutConvert,
-    PayoutSum,
-    History,
-    Pagination,
-    PayoutDataInHistory
+    History
 )
 
 
@@ -34,15 +34,17 @@ class PayoutService(_BaseService):
 
     async def test_webhook(self,
                            url_callback: str,
-                           currency: Union[CryptoCurrency, str],
-                           network: Union[Network, str],
-                           status: PayoutStatus = PayoutStatus.PAID,
+                           currency: CryptoCurrencyStr,
+                           network: NetworkStr,
+                           status: PayoutStatusStr = PayoutStatus.PAID,
                            uuid: Optional[str] = None,
                            order_id: Optional[str] = None,
                            ) -> List:
         """
         To ensure that you are correctly receiving webhooks and can validate the signature,
         you should use this method to test webhooks for payout.
+
+        doc https://doc.heleket.com/methods/payments/testing-webhook#testing_payout
 
         :param url_callback: URL to which webhooks with payment status will be sent (*)
         :param currency: Invoice crypro currency code (*)
@@ -69,12 +71,12 @@ class PayoutService(_BaseService):
                              order_id: str,
                              address: str,
                              is_subtract: bool,
-                             network: Union[Network, str],
+                             network: Optional[NetworkStr],
                              url_callback: Optional[str] = None,
-                             to_currency: Optional[CryptoCurrency] = None,
-                             course_source: Optional[CourseSource] = None,
+                             to_currency: Optional[CryptoCurrencyStr] = None,
+                             course_source: Optional[CourseSourceStr] = None,
                              from_currency: Optional[str] = None,
-                             priority: Optional[Priority] = Priority.RECOMMENDED,
+                             priority: Optional[PriorityStr] = Priority.RECOMMENDED,
                              memo: Optional[str] = None
                              ) -> Payout:
         """
@@ -103,6 +105,8 @@ class PayoutService(_BaseService):
         The payout will then be automatically processed in that specific cryptocurrency,
         utilizing your available USDT balance. It is crucial to have enough USDT balance to cover all associated fees.
 
+        doc https://doc.heleket.com/methods/payouts/creating-payout
+
         Args:
             amount (str): Payout amount
             currency (Currency): Currency code for the payout. If Currency if fiat, the to_currency parameter is required.
@@ -130,53 +134,49 @@ class PayoutService(_BaseService):
         Returns:
             Payout object
         """
-        request_data = {
-            "amount": amount,
-            "currency": currency,
-            "order_id": order_id,
-            "address": address,
-            "is_subtract": is_subtract,
-            "network": network,
-            "url_callback": url_callback,
-            "to_currency": to_currency,
-            "course_source": course_source,
-            "from_currency": from_currency,
-            "priority": priority,
-            "memo": memo,
-        }
-        PayoutScheme.model_validate(request_data)
+        payout_data = CreatePayout(
+            amount=amount,
+            currency=currency,
+            order_id=order_id,
+            address=address,
+            is_subtract=is_subtract,
+            network=network,
+            url_callback=url_callback,
+            to_currency=to_currency,
+            from_currency=from_currency,
+            course_source=course_source,
+            priority=priority,
+            memo=memo
+        )
+        request_data = payout_data.model_dump(exclude_none=False)
         result = await self._get_result_data("POST", "/payout", request_data)
-
-        convert_data = result.get("convert", None)
-        if convert_data is not None:
-            convert_data = PayoutConvert(**convert_data)
-            result.pop("convert")
-
-        return Payout(convert=convert_data, **result)
+        return Payout.model_validate(result)
 
     async def calc(self,
                    amount: str,
                    address: str,
                    currency: Currency,
                    is_subtract: bool,
-                   to_currency: Optional[str],
-                   network: Optional[Union[Network, str]],
-                   course_source: Optional[Union[CourseSource, str]],
-                   priority: Optional[Union[Priority, str]] = Priority.RECOMMENDED
-                   ) -> PayoutSum:
+                   network: Optional[NetworkStr] = None,
+                   to_currency: Optional[str] = None,
+                   course_source: Optional[CourseSourceStr] = None,
+                   priority: Optional[PriorityStr] = Priority.RECOMMENDED
+                   ) -> PayoutWithdrawalAmount:
         """
         Calculation of the withdrawal amount.
 
+        doc https://doc.heleket.com/methods/payouts/calculate-sum-output
+
         Args:
             amount (str): Payout amount. (*)
+            currency (Currency): Currency code for the payout. If Currency if fiat, the to_currency parameter is required. (*)
             address (str): The address of the wallet to which the withdrawal will be made. (*)
-            network (Optional[Union[Network, str]]): Blockchain network code.
-                Not required when the currency/to_currency is a cryptocurrency and has only one network,
-                for example BTC. (*)
             is_subtract (bool): Defines where the withdrawal fee will be deducted:
                 ``True`` - from your balance;
                 ``False`` - from payout amount, the payout amount will be decreased; (*)
-            currency (Currency): Currency code for the payout. If Currency if fiat, the to_currency parameter is required.
+            network (Optional[Union[Network, str]]): Blockchain network code.
+                Not required when the currency/to_currency is a cryptocurrency and has only one network,
+                for example BTC.
             to_currency (Optional[str]): Cryptocurrency code in which the payout will be made.
                 It is used when the currency parameter is fiat.
             course_source (Optional[Union[CourseSource, str]]): The service from which the exchange rates are taken for conversion in the invoice.
@@ -187,7 +187,7 @@ class PayoutService(_BaseService):
                 the BTC, ETH, POLYGON, and BSC networks.
 
         Returns:
-            Sum object
+            PayoutWithdrawalAmount object
         """
         request_data = {
             "amount": amount,
@@ -199,13 +199,15 @@ class PayoutService(_BaseService):
             "course_source": course_source,
             "priority": priority
         }
+        CreatePayoutWithdrawalAmount.model_validate(request_data)
         result = await self._get_result_data("POST", "/payout/calc", request_data)
+        return PayoutWithdrawalAmount.model_validate(result)
 
-        return PayoutSum(**result)
-
-    async def transfer_to_personal_wallet(self, amount: str, currency: Union[CryptoCurrency, str]) -> Transfer:
+    async def transfer_to_personal_wallet(self, amount: str, currency: CryptoCurrencyStr) -> Transfer:
         """
         Transfer to personal wallet.
+
+        doc https://doc.heleket.com/methods/payouts/transfer-to-personal
 
         :param amount: Amount to transfer
         :param currency: Currency code. **Only cryptocurrency code is allowed**.
@@ -214,9 +216,11 @@ class PayoutService(_BaseService):
         """
         return await self._transfer(amount=amount, currency=currency, endpoint="/transfer/to-personal")
 
-    async def transfer_to_business_wallet(self, amount: str, currency: Union[CryptoCurrency, str]) -> Transfer:
+    async def transfer_to_business_wallet(self, amount: str, currency: CryptoCurrencyStr) -> Transfer:
         """
         Transfer to business wallet.
+
+        doc https://doc.heleket.com/methods/payouts/transfer-to-business
 
         :param amount: Amount to transfer
         :param currency: Currency code. **Only cryptocurrency code is allowed**.
@@ -225,19 +229,21 @@ class PayoutService(_BaseService):
         """
         return await self._transfer(amount=amount, currency=currency, endpoint="/transfer/to-business")
 
-    async def _transfer(self, *, amount: str, currency: Union[CryptoCurrency, str], endpoint: str) -> Transfer:
+    async def _transfer(self, *, amount: str, currency: CryptoCurrencyStr, endpoint: str) -> Transfer:
         request_data = {
             "amount": amount,
             "currency": currency
         }
         result = await self._get_result_data("POST", endpoint, request_data)
-        return Transfer(**result)
+        return Transfer.model_validate(result)
 
     async def payout_info(self, *, uuid: Union[str, None] = None, order_id: Union[str, None] = None) -> Payout:
         """
         Get a payout info.
 
-        (! To get the payout information you need to pass one of the parameters, if you pass both, the payout will be identified by ``order_id``)
+        (To get the payout information you need to pass one of the parameters, if you pass both, the payout will be identified by ``order_id``)
+
+        doc https://doc.heleket.com/methods/payouts/payout-information
 
         :param uuid: Invoice uuid
         :param order_id: Invoice order ID
@@ -246,51 +252,41 @@ class PayoutService(_BaseService):
         """
         if uuid is None and order_id is None:
             raise ValueError("Required parameter not passed: uuid or order_id")
-        if uuid is not None and order_id is not None:
-            raise ValueError("one of the parameters must be passed: uuid or order_id")
+
+        if order_id:
+            order_id100_adapter.validate_python(order_id)
 
         request_data = {
             "uuid": uuid,
             "order_id": order_id
         }
         result = await self._get_result_data("POST", "/payout/info", request_data)
-
-        return Payout(**result)
+        return Payout.model_validate(result)
 
     async def payout_history(self,
-                              date_from: Optional[Union[str, datetime]] = None,
-                              date_to: Optional[Union[str, datetime]] = None
+                              date_from: Optional[datetime] = None,
+                              date_to: Optional[datetime] = None
                               ) -> History:
         """
         Getting a payout history.
 
+        doc https://doc.heleket.com/methods/payouts/payout-history
+
         :param date_from: Filtering by creation date, from.
         :param date_to: Filtering by creation date, to.
-
-        Date format: YYYY-MM-DD H:mm:ss
 
         :return: History object
         """
         result = await self._get_history_data("/payout/list", date_from=date_from, date_to=date_to)
-        paginate = Pagination(**result.pop("paginate"))
-
-        payouts = []
-        for payout_data in result.get("items"):
-            created_at_data = payout_data.pop("created_at")
-            updated_at_data = payout_data.pop("updated_at")
-            payouts.append(PayoutDataInHistory(
-                created_at=datetime.fromisoformat(created_at_data),
-                updated_at=datetime.fromisoformat(updated_at_data),
-                **payout_data
-            ))
-
-        return History(paginate=paginate, items=payouts)
+        return History.model_validate(result)
 
     async def services_info(self) -> List[Service]:
         """
         Returns a list of available payout services.
         Payout services store settings that are taken into account when creating a payout.
         For example. currencies, networks, minimum and maximum limits, commissions.
+
+        doc https://doc.heleket.com/methods/payouts/list-of-services
         """
         return await self._get_services_info("/payout/services")
 

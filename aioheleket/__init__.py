@@ -1,23 +1,22 @@
 from .types.client import HeleketClient
-
+from .data_classes import RequestConfig
 from .enums import *
-from .data_classes import *
+from .validation.schemas import *
 
 __all__ = [
     "HeleketClient",
 
-    "PaymentConvert",
-    "Payment",
-    "PayoutConvert",
+    "RequestConfig",
+
     "Payout",
-    "PayoutSum",
+    "Payment",
+    "StaticWallet",
+    "PayoutWithdrawalAmount",
     "Transfer",
-    "Wallet",
-    "Service",
     "Discount",
-    "Course",
+    "Service",
     "Balance",
-    "History",
+    "Course",
 
     "CryptoCurrency",
     "FiatCurrency",

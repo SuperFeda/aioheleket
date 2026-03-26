@@ -1,47 +1,36 @@
 from datetime import datetime
-from typing import Dict, Any, Optional, Union, Literal, List
+from typing import Dict, Any, Optional, Union, List
 
-from ..data_classes import (
-    Response,
-    Service,
-    ServiceLimit,
-    ServiceCommission
-)
-from ..enums import (
-    PaymentStatus,
-    PayoutStatus,
-    StaticWalletStatus,
-    Network,
-    CryptoCurrency
-)
-from ..utils.request_builder import RequestBuilder
-from ..utils.schemas import TestWebhookScheme
+from aioheleket.data_classes import Response
+from aioheleket.enums import PaymentStatus, PayoutStatus, StaticWalletStatus
+from aioheleket.request_builder import RequestBuilder
+from aioheleket.validation.schemas import TestWebhook, Service
+from aioheleket.types.aliases import HttpMethod, CryptoCurrencyStr, NetworkStr
 
 
 class _BaseService:
     def __init__(self, request_builder: RequestBuilder):
         self._request_builder = request_builder
-        self.__api_url = "https://api.heleket.com/v1"
 
-    async def _get_response(self,
-                            method: Literal["POST", "GET"],
-                            endpoint: str,
-                            data: Optional[Dict[str, Any]] = None
-                            ) -> Response:
+    async def _create_request(self,
+                              method: HttpMethod,
+                              endpoint: str,
+                              data: Optional[Dict[str, Any]] = None
+                              ) -> Response:
         if method not in ("POST", "GET"):
             raise ValueError("The method must be either POST or GET")
 
         if method == "POST":
-            return await self._request_builder.post(url=self.__api_url + endpoint, data=data)
+            return await self._request_builder.post(endpoint=endpoint, data=data)
         elif method == "GET":
-            return await self._request_builder.get(url=self.__api_url + endpoint)
+            return await self._request_builder.get(endpoint=endpoint)
 
     async def _get_result_data(self,
-                               method: Literal["POST", "GET"],
+                               method: HttpMethod,
                                endpoint: str,
                                data: Optional[Dict[str, Any]] = None
                                ) -> Union[Dict[str, Any], List[Dict[str, Any]], None]:
-        response = await self._get_response(method=method, endpoint=endpoint, data=data)
+        response = await self._create_request(method=method, endpoint=endpoint, data=data)
         data = response.json
         result = data.get("result", None)
         return result
@@ -53,17 +42,12 @@ class _BaseService:
 
     async def _get_services_info(self, endpoint: str) -> List[Service]:
         result = await self._get_result_data("POST", endpoint)
-        services_list = []
-        for service in result:
-            service_limit = ServiceLimit(**service.pop("limit"))
-            service_commission = ServiceCommission(**service.pop("commission"))
-            services_list.append(Service(**service, limit=service_limit, commission=service_commission))
-        return services_list
+        return [Service.model_validate(service) for service in result]
 
     async def _get_history_data(self,
                                 endpoint: str,
-                                date_from: Optional[Union[str, datetime]] = None,
-                                date_to: Optional[Union[str, datetime]] = None
+                                date_from: Optional[datetime] = None,
+                                date_to: Optional[datetime] = None
                                 ):
         date_format = "%Y-%m-%d %H:%M:%S"
         request_data = {
@@ -77,21 +61,21 @@ class _BaseService:
                                    endpoint: str,
                                    *,
                                    url_callback: str,
-                                   currency: Union[CryptoCurrency, str],
-                                   network: Union[Network, str],
-                                   status: Union[PaymentStatus, PayoutStatus, StaticWalletStatus],
+                                   currency: CryptoCurrencyStr,
+                                   network: NetworkStr,
+                                   status: Union[PaymentStatus, PayoutStatus, StaticWalletStatus, str],
                                    uuid: Optional[str] = None,
                                    order_id: Optional[str] = None,
                                    ) -> List:
-        request_data = {
-            "url_callback": url_callback,
-            "currency": currency,
-            "network": network,
-            "uuid": uuid,
-            "status": status,
-            "order_id": order_id
-        }
-        TestWebhookScheme.model_validate(request_data)
+        webhook_data = TestWebhook(
+            url_callback=url_callback,
+            currency=currency,
+            network=network,
+            uuid=uuid,
+            status=status,
+            order_id=order_id
+        )
+        request_data = webhook_data.model_dump(exclude_none=False)
         result = await self._get_result_data(method="POST", endpoint=endpoint, data=request_data)
         return result
 
